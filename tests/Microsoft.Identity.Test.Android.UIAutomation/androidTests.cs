@@ -1,29 +1,5 @@
-﻿//------------------------------------------------------------------------------
-//
-// Copyright (c) Microsoft Corporation.
-// All rights reserved.
-//
-// This code is licensed under the MIT License.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files(the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-//------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
 using Microsoft.Identity.Test.UIAutomation.Infrastructure;
 using Microsoft.Identity.Test.LabInfrastructure;
@@ -100,9 +76,9 @@ namespace Microsoft.Identity.Test.UIAutomation
 
                 // Ignored tests
                 //B2CGoogleMicrosoftAuthorityAcquireTokenTest,
-                //B2CFacebookEditPolicyAcquireTokenTest,
-                //B2CFacebookMicrosoftAuthorityAcquireTokenTest
-                //B2CFacebookB2CLoginAuthorityAcquireTokenTest
+                //B2CFacebookMicrosoftAuthorityAcquireTokenTest,
+                //B2CFacebookB2CLoginAuthorityAcquireTokenTest,
+                //B2CFacebookEditPolicyAcquireTokenTest
             };
 
             var hasFailed = false;
@@ -164,20 +140,20 @@ namespace Microsoft.Identity.Test.UIAutomation
         /// b2clogin.com authority
         /// with subsequent silent call
         /// </summary>
-        [Ignore("Facebook updated to Graph v3 and app center tests are failing. Ignoring for the moment.")]
         [Test]
+        [Ignore("issue: https://github.com/AzureAD/microsoft-authentication-library-for-dotnet/issues/1026")]
         public void B2CFacebookB2CLoginAuthorityAcquireTokenTest()
         {
             _mobileTestHelper.B2CFacebookAcquireTokenSilentTest(xamarinController, LabUserHelper.GetB2CFacebookAccount(), true);
         }
 
         /// <summary>
-        /// B2C acquire token with Facebook provider 
+        /// B2C acquire token with Facebook provider
         /// login.microsoftonline.com authority
         /// with subsequent silent call
         /// </summary>
-        [Ignore("Facebook updated to Graph v3 and app center tests are failing. Ignoring for the moment.")]
         [Test]
+        [Ignore("issue: https://github.com/AzureAD/microsoft-authentication-library-for-dotnet/issues/1026")]
         public void B2CFacebookMicrosoftAuthorityAcquireTokenTest()
         {
             _mobileTestHelper.PerformB2CSelectProviderOnlyFlow(xamarinController, LabUserHelper.GetB2CFacebookAccount().User, B2CIdentityProvider.Facebook, false);
@@ -190,8 +166,8 @@ namespace Microsoft.Identity.Test.UIAutomation
         /// call to edit profile authority with
         ///  UIBehavior none
         /// </summary>
-        [Ignore("Facebook updated to Graph v3 and app center tests are failing. Ignoring for the moment.")]
         [Test]
+        [Ignore("issue: https://github.com/AzureAD/microsoft-authentication-library-for-dotnet/issues/1026")]
         public void B2CFacebookEditPolicyAcquireTokenTest()
         {
             _mobileTestHelper.PerformB2CSelectProviderOnlyFlow(xamarinController, LabUserHelper.GetB2CFacebookAccount().User, B2CIdentityProvider.Facebook, true);
@@ -214,7 +190,7 @@ namespace Microsoft.Identity.Test.UIAutomation
         }
 
         /// <summary>
-        /// B2C acquire token with Google provider 
+        /// B2C acquire token with Google provider
         /// login.microsoftonline.com authority
         /// with subsequent silent call
         /// </summary>
@@ -226,7 +202,7 @@ namespace Microsoft.Identity.Test.UIAutomation
         }
 
         /// <summary>
-        /// B2C acquire token with local account 
+        /// B2C acquire token with local account
         /// b2clogin.com authority
         /// and subsequent silent call
         /// </summary>

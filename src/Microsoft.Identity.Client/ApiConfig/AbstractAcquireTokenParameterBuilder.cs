@@ -1,41 +1,15 @@
-﻿// ------------------------------------------------------------------------------
-//
-// Copyright (c) Microsoft Corporation.
-// All rights reserved.
-//
-// This code is licensed under the MIT License.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files(the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-// ------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Identity.Client.Utils;
 using Microsoft.Identity.Client.ApiConfig.Parameters;
-using Microsoft.Identity.Client.AppConfig;
-using Microsoft.Identity.Client.TelemetryCore;
+using Microsoft.Identity.Client.Mats.Internal.Events;
 
-namespace Microsoft.Identity.Client.ApiConfig
+namespace Microsoft.Identity.Client
 {
     /// <summary>
     /// Base class for builders of token requests, which attempt to acquire a token
@@ -57,6 +31,8 @@ namespace Microsoft.Identity.Client.ApiConfig
         public abstract Task<AuthenticationResult> ExecuteAsync(CancellationToken cancellationToken);
 
         internal abstract ApiEvent.ApiIds CalculateApiEventId();
+
+        internal abstract ApiTelemetryId ApiTelemetryId { get; }
 
         /// <summary>
         /// Executes the Token request asynchronously.
@@ -101,6 +77,7 @@ namespace Microsoft.Identity.Client.ApiConfig
         /// <returns>The builder to chain .With methods</returns>
         public T WithClaims(string claims)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithClaims);
             CommonParameters.Claims = claims;
             return (T)this;
         }
@@ -114,6 +91,7 @@ namespace Microsoft.Identity.Client.ApiConfig
         /// <returns></returns>
         public T WithExtraQueryParameters(string extraQueryParameters)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithExtraQueryParameters);
             if (!string.IsNullOrWhiteSpace(extraQueryParameters))
             {
                 return WithExtraQueryParameters(CoreHelpers.ParseKeyValueList(extraQueryParameters, '&', true, null));
@@ -135,6 +113,16 @@ namespace Microsoft.Identity.Client.ApiConfig
         /// <returns>The builder to chain the .With methods</returns>
         public T WithAuthority(string authorityUri, bool validateAuthority = true)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithAuthority);
+            if (validateAuthority)
+            {
+                CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithValidateAuthority);
+            }
+
+            if (string.IsNullOrWhiteSpace(authorityUri))
+            {
+                throw new ArgumentNullException(nameof(authorityUri));
+            }
             CommonParameters.AuthorityOverride = AuthorityInfo.FromAuthorityUri(authorityUri, validateAuthority);
             return (T)this;
         }
@@ -152,6 +140,16 @@ namespace Microsoft.Identity.Client.ApiConfig
             Guid tenantId,
             bool validateAuthority = true)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithAuthority);
+            if (validateAuthority)
+            {
+                CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithValidateAuthority);
+            }
+
+            if (string.IsNullOrWhiteSpace(cloudInstanceUri))
+            {
+                throw new ArgumentNullException(nameof(cloudInstanceUri));
+            }
             CommonParameters.AuthorityOverride = AuthorityInfo.FromAadAuthority(new Uri(cloudInstanceUri), tenantId, validateAuthority);
             return (T)this;
         }
@@ -176,6 +174,16 @@ namespace Microsoft.Identity.Client.ApiConfig
             string tenant,
             bool validateAuthority = true)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithAuthority);
+            if (validateAuthority)
+            {
+                CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithValidateAuthority);
+            }
+
+            if (string.IsNullOrWhiteSpace(cloudInstanceUri))
+            {
+                throw new ArgumentNullException(nameof(cloudInstanceUri));
+            }
             CommonParameters.AuthorityOverride = AuthorityInfo.FromAadAuthority(new Uri(cloudInstanceUri), tenant, validateAuthority);
             return (T)this;
         }
@@ -195,6 +203,12 @@ namespace Microsoft.Identity.Client.ApiConfig
             Guid tenantId,
             bool validateAuthority = true)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithAuthority);
+            if (validateAuthority)
+            {
+                CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithValidateAuthority);
+            }
+
             CommonParameters.AuthorityOverride = AuthorityInfo.FromAadAuthority(azureCloudInstance, tenantId, validateAuthority);
             return (T)this;
         }
@@ -215,6 +229,12 @@ namespace Microsoft.Identity.Client.ApiConfig
             string tenant,
             bool validateAuthority = true)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithAuthority);
+            if (validateAuthority)
+            {
+                CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithValidateAuthority);
+            }
+
             CommonParameters.AuthorityOverride = AuthorityInfo.FromAadAuthority(azureCloudInstance, tenant, validateAuthority);
             return (T)this;
         }
@@ -232,6 +252,12 @@ namespace Microsoft.Identity.Client.ApiConfig
         /// <returns>The builder to chain the .With methods</returns>
         public T WithAuthority(AzureCloudInstance azureCloudInstance, AadAuthorityAudience authorityAudience, bool validateAuthority = true)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithAuthority);
+            if (validateAuthority)
+            {
+                CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithValidateAuthority);
+            }
+
             CommonParameters.AuthorityOverride = AuthorityInfo.FromAadAuthority(azureCloudInstance, authorityAudience, validateAuthority);
             return (T)this;
         }
@@ -247,6 +273,12 @@ namespace Microsoft.Identity.Client.ApiConfig
         /// <returns>The builder to chain the .With methods</returns>
         public T WithAuthority(AadAuthorityAudience authorityAudience, bool validateAuthority = true)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithAuthority);
+            if (validateAuthority)
+            {
+                CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithValidateAuthority);
+            }
+
             CommonParameters.AuthorityOverride = AuthorityInfo.FromAadAuthority(authorityAudience, validateAuthority);
             return (T)this;
         }
@@ -260,6 +292,16 @@ namespace Microsoft.Identity.Client.ApiConfig
         /// <returns>The builder to chain the .With methods</returns>
         public T WithAdfsAuthority(string authorityUri, bool validateAuthority = true)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithAdfsAuthority);
+            if (validateAuthority)
+            {
+                CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithValidateAuthority);
+            }
+
+            if (string.IsNullOrWhiteSpace(authorityUri))
+            {
+                throw new ArgumentNullException(nameof(authorityUri));
+            }
             CommonParameters.AuthorityOverride = new AuthorityInfo(AuthorityType.Adfs, authorityUri, validateAuthority);
             return (T)this;
         }
@@ -273,6 +315,12 @@ namespace Microsoft.Identity.Client.ApiConfig
         /// <returns>The builder to chain the .With methods</returns>
         public T WithB2CAuthority(string authorityUri)
         {
+            CommonParameters.AddApiTelemetryFeature(ApiTelemetryFeature.WithB2CAuthority);
+
+            if (string.IsNullOrWhiteSpace(authorityUri))
+            {
+                throw new ArgumentNullException(nameof(authorityUri));
+            }
             CommonParameters.AuthorityOverride = new AuthorityInfo(AuthorityType.B2C, authorityUri, false);
             return (T)this;
         }
@@ -288,6 +336,8 @@ namespace Microsoft.Identity.Client.ApiConfig
         {
             Validate();
             CommonParameters.ApiId = CalculateApiEventId();
+            CommonParameters.ApiTelemId = ApiTelemetryId;
+            CommonParameters.TelemetryCorrelationId = Guid.NewGuid();
         }
     }
 }

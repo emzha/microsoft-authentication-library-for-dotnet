@@ -1,29 +1,5 @@
-﻿//------------------------------------------------------------------------------
-//
-// Copyright (c) Microsoft Corporation.
-// All rights reserved.
-//
-// This code is licensed under the MIT License.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files(the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-//------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
 using System;
 using System.Collections.Generic;
@@ -49,12 +25,16 @@ namespace DesktopTestApp
     {
         private const string PublicClientId = "a914b42c-61ee-456a-9fd5-379fc217e21e";
         private string _b2CClientId = null;
+        public const string B2CCustomDomainClientId = "64a88201-6bbd-49f5-ab46-9153798493fd ";
 
         private PublicClientHandler _publicClientHandler;
         private CancellationTokenSource _cancellationTokenSource;
         private readonly string[] _b2CScopes = { "https://msidlabb2c.onmicrosoft.com/msidlabb2capi/read" };
+        public static string[] B2cCustomDomainScopes = { "https://public.msidlabb2c/b2cwebapp/read" };
         private const string B2CAuthority = "https://msidlabb2c.b2clogin.com/tfp/msidlabb2c.onmicrosoft.com/B2C_1_SISOPolicy/";
         private const string B2CEditProfileAuthority = "https://msidlabb2c.b2clogin.com/tfp/msidlabb2c.onmicrosoft.com/B2C_1_ProfileEditPolicy/";
+        public const string B2CCustomDomainAuthority = "https://public.msidlabb2c.com/tfp/public.msidlabb2c.com/B2C_1_signupsignin_userflow/";
+        public const string B2CROPCAuthority = "https://msidlabb2c.b2clogin.com/tfp/msidlabb2c.onmicrosoft.com/B2C_1_ROPC_Auth";
 
         private bool IsForceRefreshEnabled => forceRefreshCheckBox.Checked;
 
@@ -173,8 +153,7 @@ namespace DesktopTestApp
                     AuthenticationResult authenticationResult = await _publicClientHandler.AcquireTokenInteractiveAsync(
                         SplitScopeString(scopes.Text),
                         GetUIBehavior(),
-                        _publicClientHandler.ExtraQueryParams,
-                        new UIParent()).ConfigureAwait(true);
+                        _publicClientHandler.ExtraQueryParams).ConfigureAwait(true);
 
                     SetResultPageInfo(authenticationResult);
                     RefreshUserList();
@@ -195,10 +174,11 @@ namespace DesktopTestApp
 
                 try
                 {
-                    AuthenticationResult authenticationResult =
-                        await _publicClientHandler.PublicClientApplication.AcquireTokenByIntegratedWindowsAuthAsync(
-                            SplitScopeString(scopes.Text),
-                            username).ConfigureAwait(true);
+                    AuthenticationResult authenticationResult = await _publicClientHandler.PublicClientApplication
+                        .AcquireTokenByIntegratedWindowsAuth(SplitScopeString(scopes.Text))
+                        .WithUsername(username)
+                        .ExecuteAsync(CancellationToken.None)
+                        .ConfigureAwait(true);
 
                     SetResultPageInfo(authenticationResult);
                     RefreshUserList();
@@ -213,7 +193,24 @@ namespace DesktopTestApp
 
         private async void acquireTokenByUPButton_Click(object sender, EventArgs e)
         {
-            using (new UIProgressScope(this))
+            try
+            {
+                _publicClientHandler.PublicClientApplication = PublicClientApplicationBuilder
+                    .Create(PublicClientId)
+                    .WithAuthority("https://login.microsoftonline.com/organizations")
+                    .BuildConcrete();
+
+                await AcquireTokenByUsernamePasswordAsync().ConfigureAwait(true);
+            }
+            catch (Exception exc)
+            {
+                CreateException(exc);
+            }
+        }
+
+        private async Task AcquireTokenByUsernamePasswordAsync()
+        {
+            try
             {
                 ClearResultPageInfo();
                 userPasswordTextBox.PasswordChar = '*';
@@ -221,20 +218,13 @@ namespace DesktopTestApp
                 string username = loginHintTextBox.Text; //Can be blank for U/P
                 SecureString securePassword = ConvertToSecureString(userPasswordTextBox);
 
-                await AcquireTokenByUsernamePasswordAsync(username, securePassword).ConfigureAwait(true);
-            }
-        }
-
-        private async Task AcquireTokenByUsernamePasswordAsync(string username, SecureString password)
-        {
-            try
-            {
-                _publicClientHandler.PublicClientApplication = new PublicClientApplication(PublicClientId, "https://login.microsoftonline.com/organizations");
-
-                AuthenticationResult authResult = await _publicClientHandler.PublicClientApplication.AcquireTokenByUsernamePasswordAsync(
-                    SplitScopeString(scopes.Text),
-                    username,
-                    password).ConfigureAwait(true);
+                AuthenticationResult authResult = await _publicClientHandler.PublicClientApplication
+                    .AcquireTokenByUsernamePassword(
+                        SplitScopeString(scopes.Text),
+                        username,
+                        securePassword)
+                    .ExecuteAsync(CancellationToken.None)
+                    .ConfigureAwait(true);
 
                 SetResultPageInfo(authResult);
                 RefreshUserList();
@@ -306,7 +296,11 @@ namespace DesktopTestApp
 
             try
             {
-                AuthenticationResult authenticationResult = await _publicClientHandler.AcquireTokenInteractiveWithAuthorityAsync(SplitScopeString(scopes.Text), GetUIBehavior(), _publicClientHandler.ExtraQueryParams, new UIParent()).ConfigureAwait(true);
+                AuthenticationResult authenticationResult = await _publicClientHandler
+                    .AcquireTokenInteractiveWithAuthorityAsync(
+                        SplitScopeString(scopes.Text),
+                        GetUIBehavior(),
+                        _publicClientHandler.ExtraQueryParams).ConfigureAwait(true);
 
                 SetResultPageInfo(authenticationResult);
             }
@@ -482,15 +476,16 @@ namespace DesktopTestApp
             {
                 _cancellationTokenSource = new CancellationTokenSource();
 
-                AuthenticationResult authenticationResult =
-                    await _publicClientHandler.PublicClientApplication.AcquireTokenWithDeviceCodeAsync(
+                AuthenticationResult authenticationResult = await _publicClientHandler.PublicClientApplication
+                    .AcquireTokenWithDeviceCode(
                         SplitScopeString(scopes.Text),
                         dcr =>
                         {
                             BeginInvoke(new MethodInvoker(() => callResult.Text = dcr.Message));
                             return Task.FromResult(0);
-                        },
-                        _cancellationTokenSource.Token).ConfigureAwait(true);
+                        })
+                    .ExecuteAsync(_cancellationTokenSource.Token)
+                    .ConfigureAwait(true);
 
                 SetResultPageInfo(authenticationResult);
             }
@@ -532,8 +527,7 @@ namespace DesktopTestApp
                     AuthenticationResult authenticationResult = await _publicClientHandler.AcquireTokenInteractiveAsync(
                         _b2CScopes,
                         GetUIBehavior(),
-                        _publicClientHandler.ExtraQueryParams,
-                        new UIParent()).ConfigureAwait(true);
+                        _publicClientHandler.ExtraQueryParams).ConfigureAwait(true);
 
                     SetResultPageInfo(authenticationResult);
                     RefreshUserList();
@@ -561,8 +555,7 @@ namespace DesktopTestApp
                     AuthenticationResult authenticationResult = await _publicClientHandler.AcquireTokenInteractiveAsync(
                         _b2CScopes,
                         GetUIBehavior(),
-                        _publicClientHandler.ExtraQueryParams,
-                        new UIParent()).ConfigureAwait(true);
+                        _publicClientHandler.ExtraQueryParams).ConfigureAwait(true);
 
                     SetResultPageInfo(authenticationResult);
                     RefreshUserList();
@@ -597,6 +590,74 @@ namespace DesktopTestApp
             }
         }
 
+        private async void B2cCustomDomain_Click(object sender, EventArgs e)
+        {
+            using (new UIProgressScope(this))
+            {
+                ClearResultPageInfo();
+
+                _publicClientHandler.InteractiveAuthority = B2CCustomDomainAuthority;
+                _publicClientHandler.ApplicationId = B2CCustomDomainClientId;
+
+                try
+                {
+                    AuthenticationResult authenticationResult =
+                        await _publicClientHandler.AcquireTokenInteractiveWithB2CAuthorityAsync(
+                            B2cCustomDomainScopes,
+                            Prompt.SelectAccount,
+                            null,
+                            B2CCustomDomainAuthority).ConfigureAwait(true);
+
+                    SetResultPageInfo(authenticationResult);
+                }
+                catch (Exception exc)
+                {
+                    CreateException(exc);
+                }
+            }
+        }
+
+        private async void B2cSilentCustomDomain_Click(object sender, EventArgs e)
+        {
+            using (new UIProgressScope(this))
+            {
+                ClearResultPageInfo();
+
+                _publicClientHandler.InteractiveAuthority = B2CCustomDomainAuthority;
+                _publicClientHandler.ApplicationId = B2CCustomDomainClientId;
+
+                try
+                {
+                    AuthenticationResult authenticationResult =
+                        await _publicClientHandler.AcquireTokenSilentAsync(
+                            B2cCustomDomainScopes,
+                            IsForceRefreshEnabled).ConfigureAwait(true);
+
+                    SetResultPageInfo(authenticationResult);
+                }
+                catch (Exception exc)
+                {
+                    CreateException(exc);
+                }
+            }
+        }
+
+        private async void RopcB2CAT_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                _publicClientHandler.PublicClientApplication = PublicClientApplicationBuilder
+                   .Create(_b2CClientId)
+                   .WithB2CAuthority(B2CROPCAuthority)
+                   .BuildConcrete();
+                await AcquireTokenByUsernamePasswordAsync().ConfigureAwait(true);
+            }
+            catch (Exception exc)
+            {
+                CreateException(exc);
+            }
+        }
+        
         private void GetB2CClientIdFromLab()
         {
             if (_b2CClientId != null)

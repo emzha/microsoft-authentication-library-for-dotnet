@@ -1,34 +1,9 @@
-﻿//----------------------------------------------------------------------
-//
-// Copyright (c) Microsoft Corporation.
-// All rights reserved.
-//
-// This code is licensed under the MIT License.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files(the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-//------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using Microsoft.Identity.Client.Exceptions;
 using Microsoft.Identity.Client.Utils;
 using Microsoft.Identity.Json.Linq;
 
@@ -43,11 +18,7 @@ namespace Microsoft.Identity.Client
     /// </remarks>
     public class MsalException : Exception
     {
-        /// <summary>
-        /// Unknown Error occured.
-        /// <para>Mitigation</para> None. You might want to inform the end user.
-        /// </summary>
-        public const string UnknownError = "unknown_error";
+        private string _errorCode;
 
         /// <summary>
         /// Initializes a new instance of the exception class.
@@ -55,7 +26,7 @@ namespace Microsoft.Identity.Client
         public MsalException()
             : base(MsalErrorMessage.Unknown)
         {
-            ErrorCode = UnknownError;
+            ErrorCode = MsalError.UnknownError;
         }
 
         /// <summary>
@@ -83,6 +54,10 @@ namespace Microsoft.Identity.Client
         public MsalException(string errorCode, string errorMessage)
             : base(errorMessage)
         {
+            if (string.IsNullOrWhiteSpace(Message))
+            {
+                throw new ArgumentNullException(nameof(Message));
+            }
             ErrorCode = errorCode;
         }
 
@@ -103,6 +78,11 @@ namespace Microsoft.Identity.Client
         public MsalException(string errorCode, string errorMessage, Exception innerException)
             : base(errorMessage, innerException)
         {
+            if (string.IsNullOrWhiteSpace(Message))
+            {
+                throw new ArgumentNullException(nameof(Message));
+            }
+
             ErrorCode = errorCode;
         }
 
@@ -111,7 +91,11 @@ namespace Microsoft.Identity.Client
         /// exception handling. Values for this code are typically provided in constant strings in the derived exceptions types
         /// with explanations of mitigation.
         /// </summary>
-        public string ErrorCode { get; private set; }
+        public string ErrorCode
+        {
+            get => _errorCode;
+            private set => _errorCode = string.IsNullOrWhiteSpace(value) ? throw new ArgumentNullException() : value;
+        }
 
         /// <summary>
         /// Creates and returns a string representation of the current exception.

@@ -1,29 +1,5 @@
-﻿//----------------------------------------------------------------------
-//
-// Copyright (c) Microsoft Corporation.
-// All rights reserved.
-//
-// This code is licensed under the MIT License.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files(the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-//------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
 using System;
 using System.Collections.Generic;
@@ -32,20 +8,20 @@ using System.IO;
 using System.Linq;
 using System.Security;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Identity.Client;
-using Microsoft.Identity.Client.AppConfig;
 
 namespace NetCoreTestApp
 {
     public class Program
     {
-        private static readonly string ClientIdForPublicApp = "0615b6ca-88d4-4884-8729-b178178f7c27";
-        private static readonly string ClientIdForConfidentialApp = "<enter id>";
+        private static readonly string s_clientIdForPublicApp = "0615b6ca-88d4-4884-8729-b178178f7c27";
+        private static readonly string s_clientIdForConfidentialApp = "<enter id>";
 
-        private static readonly string Username = ""; // used for WIA and U/P, cannot be empty on .net core
-        private static readonly string Authority = "https://login.microsoftonline.com/organizations/v2.0"; // common will not work for WIA and U/P but it is a good test case
-        private static readonly IEnumerable<string> Scopes = new[] { "user.read" }; // used for WIA and U/P, can be empty
+        private static readonly string s_username = ""; // used for WIA and U/P, cannot be empty on .net core
+        private static readonly string s_authority = "https://login.microsoftonline.com/organizations/v2.0"; // common will not work for WIA and U/P but it is a good test case
+        private static readonly IEnumerable<string> s_scopes = new[] { "user.read" }; // used for WIA and U/P, can be empty
 
         private const string GraphAPIEndpoint = "https://graph.microsoft.com/v1.0/me";
 
@@ -54,8 +30,8 @@ namespace NetCoreTestApp
         public static void Main(string[] args)
         {
             IPublicClientApplication pca = PublicClientApplicationBuilder
-                .Create(ClientIdForPublicApp)
-                .WithAuthority(new Uri(Authority))
+                .Create(s_clientIdForPublicApp)
+                .WithAuthority(new Uri(s_authority))
                 .WithLogging(Log, LogLevel.Verbose, true)
 #if ARIA_TELEMETRY_ENABLED
                 .WithTelemetry(new Microsoft.Identity.Client.AriaTelemetryProvider.ServerTelemetryHandler()).OnEvents)
@@ -108,24 +84,24 @@ namespace NetCoreTestApp
                     switch (selection)
                     {
                         case 1: // acquire token
-                            authTask = pca.AcquireTokenByIntegratedWindowsAuthAsync(Scopes, Username);
+                            authTask = pca.AcquireTokenByIntegratedWindowsAuth(s_scopes).WithUsername(s_username).ExecuteAsync(CancellationToken.None);
                             await FetchTokenAndCallGraphAsync(pca, authTask).ConfigureAwait(false);
 
                             break;
                         case 2: // acquire token u/p
                             SecureString password = GetPasswordFromConsole();
-                            authTask = pca.AcquireTokenByUsernamePasswordAsync(Scopes, Username, password);
+                            authTask = pca.AcquireTokenByUsernamePassword(s_scopes, s_username, password).ExecuteAsync(CancellationToken.None);
                             await FetchTokenAndCallGraphAsync(pca, authTask).ConfigureAwait(false);
 
                             break;
                         case 3:
-                            authTask = pca.AcquireTokenWithDeviceCodeAsync(
-                                Scopes,
+                            authTask = pca.AcquireTokenWithDeviceCode(
+                                s_scopes,
                                 deviceCodeResult =>
                                 {
                                     Console.WriteLine(deviceCodeResult.Message);
                                     return Task.FromResult(0);
-                                });
+                                }).ExecuteAsync(CancellationToken.None);
                             await FetchTokenAndCallGraphAsync(pca, authTask).ConfigureAwait(false);
 
                             break;
@@ -136,7 +112,7 @@ namespace NetCoreTestApp
                                 Log(LogLevel.Error, "Test App Message - no accounts found, AcquireTokenSilentAsync will fail... ", false);
                             }
 
-                            authTask = pca.AcquireTokenSilentAsync(Scopes, account);
+                            authTask = pca.AcquireTokenSilent(s_scopes, account).ExecuteAsync(CancellationToken.None);
                             await FetchTokenAndCallGraphAsync(pca, authTask).ConfigureAwait(false);
 
                             break;
@@ -188,11 +164,19 @@ namespace NetCoreTestApp
 
         private static void RunClientCredentialWithCertificate()
         {
-            ClientCredential cc = new ClientCredential(new ClientAssertionCertificate(GetCertificateByThumbprint("<THUMBPRINT>")));
-            ConfidentialClientApplication app = new ConfidentialClientApplication(ClientIdForConfidentialApp, "http://localhost", cc, new TokenCache(), new TokenCache());
+            var app = ConfidentialClientApplicationBuilder
+                .Create(s_clientIdForConfidentialApp)
+                .WithRedirectUri("http://localhost")
+                .WithCertificate(GetCertificateByThumbprint("<THUMBPRINT>"))
+                .Build();
+
             try
             {
-                AuthenticationResult result = app.AcquireTokenForClientAsync(new string[] { "User.Read.All" }, true).Result;
+                AuthenticationResult result = app
+                    .AcquireTokenForClient(new string[] { "User.Read.All" })
+                    .WithForceRefresh(true)
+                    .ExecuteAsync(CancellationToken.None)
+                    .Result;
             }
             catch (Exception exc)
             {
