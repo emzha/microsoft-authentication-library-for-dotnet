@@ -1,29 +1,5 @@
-﻿//----------------------------------------------------------------------
-//
-// Copyright (c) Microsoft Corporation.
-// All rights reserved.
-//
-// This code is licensed under the MIT License.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files(the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-//------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
 using System;
 using System.Collections.Generic;
@@ -43,6 +19,7 @@ namespace FociTestApp
         // DO NOT CHECK THESE IN
         private const string FAMILY_MEMBER_1 = "";  // Office
         private const string FAMILY_MEMBER_2 = "";  // Teams
+
 
         private const string NON_FAMILY_MEMBER = "0615b6ca-88d4-4884-8729-b178178f7c27";
 
@@ -117,9 +94,10 @@ namespace FociTestApp
                         4. Acquire Token Silent App1 (family member)
                         5. Acquire Token Silent App2 (family member)
                         6. Acquire Token Silent App3 (non-family member)
-                        
 
-                        7. Clear cache
+
+                        7. Clear cache via App1
+                        8. Clear cache via App2
                         0. Exit App
                     Enter your Selection: ");
                 int.TryParse(Console.ReadLine(), out var selection);
@@ -157,13 +135,25 @@ namespace FociTestApp
 
                     case 7:
                         var accounts1 = await s_pcaFam1.GetAccountsAsync().ConfigureAwait(false);
-                        var accounts2 = await s_pcaFam1.GetAccountsAsync().ConfigureAwait(false);
-                        var accounts3 = await s_pcaFam1.GetAccountsAsync().ConfigureAwait(false);
-
+                        var accounts2 = await s_pcaFam2.GetAccountsAsync().ConfigureAwait(false);
+                        var accounts3 = await s_pcaNonFam.GetAccountsAsync().ConfigureAwait(false);
+                         
 
                         foreach (var acc in accounts1)
                         {
                             await s_pcaFam1.RemoveAsync(acc).ConfigureAwait(false);
+                        }
+
+                        break;
+                    case 8:
+                       accounts1 = await s_pcaFam1.GetAccountsAsync().ConfigureAwait(false);
+                       accounts2 = await s_pcaFam2.GetAccountsAsync().ConfigureAwait(false);
+                       accounts3 = await s_pcaNonFam.GetAccountsAsync().ConfigureAwait(false);
+
+
+                        foreach (var acc in accounts2)
+                        {
+                            await s_pcaFam2.RemoveAsync(acc).ConfigureAwait(false);
                         }
 
                         break;

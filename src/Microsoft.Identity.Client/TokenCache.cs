@@ -1,29 +1,5 @@
-﻿//----------------------------------------------------------------------
-//
-// Copyright (c) Microsoft Corporation.
-// All rights reserved.
-//
-// This code is licensed under the MIT License.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files(the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-//------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
 using Microsoft.Identity.Client.Cache;
 using Microsoft.Identity.Client.Cache.Items;
@@ -71,13 +47,11 @@ namespace Microsoft.Identity.Client
         private TokenCacheCallback _userConfiguredAfterAccess;
         private TokenCacheCallback _userConfiguredBeforeWrite;
 
-        internal IServiceBundle ServiceBundle { get; private set; }
+        internal IServiceBundle ServiceBundle { get; }
 
         private readonly ITokenCacheAccessor _accessor;
 
-       
-
-        internal ILegacyCachePersistence LegacyCachePersistence { get; private set; }
+        internal ILegacyCachePersistence LegacyCachePersistence { get; }
 
         ITokenCacheAccessor ITokenCacheInternal.Accessor => _accessor;
         ILegacyCachePersistence ITokenCacheInternal.LegacyPersistence => LegacyCachePersistence;
@@ -99,16 +73,12 @@ namespace Microsoft.Identity.Client
             _defaultTokenCacheBlobStorage = proxy.CreateTokenCacheBlobStorage();
             LegacyCachePersistence = proxy.CreateLegacyCachePersistence();
 
-            // Must happen last, this code can access things like _accessor and such above.
-            SetServiceBundle(serviceBundle);
-        }
-
-        internal void SetServiceBundle(IServiceBundle serviceBundle)
-        {
-            ServiceBundle = serviceBundle;
 #if iOS
-            SetIosKeychainSecurityGroup(ServiceBundle.Config.IosKeychainSecurityGroup);
+            SetIosKeychainSecurityGroup(serviceBundle.Config.IosKeychainSecurityGroup);
 #endif // iOS
+
+            // Must happen last, this code can access things like _accessor and such above.
+            ServiceBundle = serviceBundle;
         }
 
         /// <summary>
@@ -119,8 +89,6 @@ namespace Microsoft.Identity.Client
         internal TokenCache(IServiceBundle serviceBundle, ILegacyCachePersistence legacyCachePersistenceForTest)
             : this(serviceBundle)
         {
-            SetServiceBundle(serviceBundle);
-
             LegacyCachePersistence = legacyCachePersistenceForTest;
         }
 
@@ -215,7 +183,7 @@ namespace Microsoft.Identity.Client
             AuthenticationRequestParameters requestParams,
             MsalTokenResponse response)
         {
-           // TODO: ensure that instance metadata has occured, otherwise we will use 
+            // TODO: ensure that instance metadata has occured, otherwise we will use
 
             // todo: could we look into modifying this to take tenantId to reduce the dependency on IValidatedAuthoritiesCache?
             var tenantId = Authority.CreateAuthority(ServiceBundle, requestParams.TenantUpdatedCanonicalAuthority)
@@ -576,9 +544,9 @@ namespace Microsoft.Identity.Client
             var cacheEvent = new CacheEvent(
                 CacheEvent.TokenCacheLookup,
                 requestParams.RequestContext.TelemetryCorrelationId)
-                {
-                    TokenType = CacheEvent.TokenTypes.RT
-                };
+            {
+                TokenType = CacheEvent.TokenTypes.RT
+            };
 
             using (ServiceBundle.TelemetryManager.CreateTelemetryHelper(cacheEvent))
             {
@@ -766,7 +734,7 @@ namespace Microsoft.Identity.Client
                 // TODO: Not all discovery logic checks for this condition, this is a bug simialar to
                 // https://github.com/AzureAD/microsoft-authentication-library-for-dotnet/issues/1037
                 (authorityType == AuthorityType.B2C &&
-                    Authority.GetEnviroment(authority).Equals(AzurePublicEnv)); 
+                    Authority.GetEnviroment(authority).Equals(AzurePublicEnv));
         }
 
         private InstanceDiscoveryMetadataEntry GetCachedAuthorityMetaData(string authority)
@@ -848,7 +816,7 @@ namespace Microsoft.Identity.Client
             {
                 foreach (MsalAccountCacheItem account in accountCacheItems)
                 {
-                    if (rtItem.HomeAccountId.Equals(account.HomeAccountId, StringComparison.OrdinalIgnoreCase))
+                    if (RtMatchesAccount(rtItem, account))
                     {
                         clientInfoToAccountMap[rtItem.HomeAccountId] = new Account(
                             account.HomeAccountId,
@@ -869,11 +837,23 @@ namespace Microsoft.Identity.Client
             return accounts;
         }
 
+        private bool RtMatchesAccount(MsalRefreshTokenCacheItem rtItem, MsalAccountCacheItem account)
+        {
+            bool homeAccIdMatch = rtItem.HomeAccountId.Equals(account.HomeAccountId, StringComparison.OrdinalIgnoreCase);
+            bool clientIdMatch =
+                rtItem.IsFRT || // Cannot filter by client ID if the RT can be used by multiple clients
+                rtItem.ClientId.Equals(ClientId, StringComparison.OrdinalIgnoreCase);
+
+            return homeAccIdMatch && clientIdMatch;
+        }
+
         private void FetchAllAccountItemsFromCache(
             out IEnumerable<MsalRefreshTokenCacheItem> tokenCacheItems,
             out IEnumerable<MsalAccountCacheItem> accountCacheItems,
             out AdalUsersForMsal adalUsersResult)
         {
+            bool filterByClientId = !_featureFlags.IsFociEnabled;
+
             lock (LockObject)
             {
                 var args = new TokenCacheNotificationArgs
@@ -886,7 +866,7 @@ namespace Microsoft.Identity.Client
                 OnBeforeAccess(args);
                 try
                 {
-                    tokenCacheItems = ((ITokenCacheInternal)this).GetAllRefreshTokens(false);
+                    tokenCacheItems = ((ITokenCacheInternal)this).GetAllRefreshTokens(filterByClientId);
                     accountCacheItems = ((ITokenCacheInternal)this).GetAllAccounts();
 
                     adalUsersResult = CacheFallbackOperations.GetAllAdalUsersForMsal(
@@ -935,7 +915,7 @@ namespace Microsoft.Identity.Client
             {
                 return await Task.FromResult(aliases).ConfigureAwait(false);
             }
-          
+
             var instanceDiscoveryResult = await GetCachedOrDiscoverAuthorityMetaDataAsync(authority, requestContext)
                 .ConfigureAwait(false);
 
@@ -1059,6 +1039,12 @@ namespace Microsoft.Identity.Client
             }
         }
 
+        /// <summary>
+        /// MSAL account removal depends on wheather we have an FRT or not in the cache. If an FRT exists,
+        /// we can no longer filter by clientID
+        /// </summary>
+        /// <param name="account"></param>
+        /// <param name="requestContext"></param>
         void ITokenCacheInternal.RemoveMsalAccount(IAccount account, RequestContext requestContext)
         {
             if (account.HomeAccountId == null)
@@ -1067,35 +1053,41 @@ namespace Microsoft.Identity.Client
                 return;
             }
 
-            // Delete ALL refresh tokens associated with this account
             var allRefreshTokens = ((ITokenCacheInternal)this).GetAllRefreshTokens(false)
                 .Where(item => item.HomeAccountId.Equals(account.HomeAccountId.Identifier, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            foreach (MsalRefreshTokenCacheItem refreshTokenCacheItem in allRefreshTokens)
+            // To maintain backward compatiblity with other MSALs, filter all credentials by clientID if
+            // Foci is disabled or if an FRT is not present
+            bool filterByClientId = !_featureFlags.IsFociEnabled || !FrtExists(allRefreshTokens);
+
+            // Delete all credentials associated with this IAccount
+            var refreshTokensToDelete = filterByClientId ?
+                allRefreshTokens.Where(x => x.ClientId.Equals(ClientId, StringComparison.OrdinalIgnoreCase)) :
+                allRefreshTokens;
+
+            foreach (MsalRefreshTokenCacheItem refreshTokenCacheItem in refreshTokensToDelete)
             {
                 _accessor.DeleteRefreshToken(refreshTokenCacheItem.GetKey());
             }
-
             requestContext.Logger.Info("Deleted refresh token count - " + allRefreshTokens.Count);
-            IList<MsalAccessTokenCacheItem> allAccessTokens = ((ITokenCacheInternal)this).GetAllAccessTokens(false)
+
+            IList<MsalAccessTokenCacheItem> allAccessTokens = ((ITokenCacheInternal)this).GetAllAccessTokens(filterByClientId)
                 .Where(item => item.HomeAccountId.Equals(account.HomeAccountId.Identifier, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             foreach (MsalAccessTokenCacheItem accessTokenCacheItem in allAccessTokens)
             {
                 _accessor.DeleteAccessToken(accessTokenCacheItem.GetKey());
             }
-
             requestContext.Logger.Info("Deleted access token count - " + allAccessTokens.Count);
 
-            var allIdTokens = ((ITokenCacheInternal)this).GetAllIdTokens(false)
+            var allIdTokens = ((ITokenCacheInternal)this).GetAllIdTokens(filterByClientId)
                 .Where(item => item.HomeAccountId.Equals(account.HomeAccountId.Identifier, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             foreach (MsalIdTokenCacheItem idTokenCacheItem in allIdTokens)
             {
                 _accessor.DeleteIdToken(idTokenCacheItem.GetKey());
             }
-
             requestContext.Logger.Info("Deleted Id token count - " + allIdTokens.Count);
 
             ((ITokenCacheInternal)this).GetAllAccounts()
@@ -1104,6 +1096,11 @@ namespace Microsoft.Identity.Client
                 .ToList()
                 .ForEach(accItem => _accessor.DeleteAccount(accItem.GetKey()));
 
+        }
+
+        private static bool FrtExists(List<MsalRefreshTokenCacheItem> allRefreshTokens)
+        {
+            return allRefreshTokens.Any(rt => rt.IsFRT);
         }
 
         private void RemoveAdalUser(IAccount account)
@@ -1261,7 +1258,7 @@ namespace Microsoft.Identity.Client
         /// <summary>
         /// Serializes using the <see cref="SerializeMsalV2"/> serializer.
         /// Obsolete: Please use specialized Serialization methods.
-        /// <see cref="SerializeMsalV2"/> replaces <see cref="Serialize"/>. 
+        /// <see cref="SerializeMsalV2"/> replaces <see cref="Serialize"/>.
         /// <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/> Is our recommended way of serializing/deserializing.
         /// <see cref="SerializeAdalV3"/> For interoperability with ADAL.NET v3.
         /// </summary>
@@ -1278,7 +1275,7 @@ namespace Microsoft.Identity.Client
         /// <summary>
         /// Deserializes the token cache from a serialization blob in the unified cache format
         /// Obsolete: Please use specialized Deserialization methods.
-        /// <see cref="DeserializeMsalV2"/> replaces <see cref="Deserialize"/> 
+        /// <see cref="DeserializeMsalV2"/> replaces <see cref="Deserialize"/>
         /// <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/> Is our recommended way of serializing/deserializing.
         /// <see cref="DeserializeAdalV3"/> For interoperability with ADAL.NET v3
         /// </summary>
@@ -1296,8 +1293,8 @@ namespace Microsoft.Identity.Client
         /// <summary>
         /// Serializes the token cache to the ADAL.NET 3.x cache format.
         /// If you need to maintain SSO between an application using ADAL 3.x or MSAL 2.x and this application using MSAL 3.x,
-        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>, 
-        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>. 
+        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>,
+        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>.
         /// </summary>
         /// <returns>array of bytes containing the serialized ADAL.NET V3 cache data</returns>
         /// <remarks>
@@ -1316,8 +1313,8 @@ namespace Microsoft.Identity.Client
         /// <summary>
         /// Deserializes the token cache to the ADAL.NET 3.x cache format.
         /// If you need to maintain SSO between an application using ADAL 3.x or MSAL 2.x and this application using MSAL 3.x,
-        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>, 
-        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>. 
+        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>,
+        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>.
         /// </summary>
         /// <param name="adalV3State">Array of bytes containing serialized Adal.NET V3 cache data</param>
         /// <remarks>
@@ -1336,8 +1333,8 @@ namespace Microsoft.Identity.Client
         /// <summary>
         /// Serializes the token cache to the MSAL.NET 2.x unified cache format, which is compatible with ADAL.NET v4 and other MSAL.NET v2 applications.
         /// If you need to maintain SSO between an application using ADAL 3.x or MSAL 2.x and this application using MSAL 3.x,
-        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>, 
-        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>. 
+        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>,
+        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>.
         /// </summary>
         /// <returns>array of bytes containing the serialized MsalV2 cache</returns>
         /// <remarks>
@@ -1356,8 +1353,8 @@ namespace Microsoft.Identity.Client
         /// <summary>
         /// Deserializes the token cache to the MSAL.NET 2.x unified cache format, which is compatible with ADAL.NET v4 and other MSAL.NET v2 applications.
         /// If you need to maintain SSO between an application using ADAL 3.x or MSAL 2.x and this application using MSAL 3.x,
-        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>, 
-        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>. 
+        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>,
+        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>.
         /// </summary>
         /// <param name="msalV2State">Array of bytes containing serialized MsalV2 cache data</param>
         /// <remarks>
@@ -1384,8 +1381,8 @@ namespace Microsoft.Identity.Client
         /// <summary>
         /// Serializes the token cache, in the MSAL.NET V3 cache format.
         /// If you need to maintain SSO between an application using ADAL 3.x or MSAL 2.x and this application using MSAL 3.x,
-        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>, 
-        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>. 
+        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>,
+        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>.
         /// </summary>
         /// <returns>Byte stream representation of the cache</returns>
         /// <remarks>
@@ -1404,8 +1401,8 @@ namespace Microsoft.Identity.Client
         /// <summary>
         /// De-serializes from the MSAL.NET V3 cache format.
         /// If you need to maintain SSO between an application using ADAL 3.x or MSAL 2.x and this application using MSAL 3.x,
-        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>, 
-        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>. 
+        /// you might also want to serialize and deserialize with <see cref="SerializeAdalV3"/>/<see cref="DeserializeAdalV3"/> or <see cref="SerializeMsalV2"/>/<see cref="DeserializeMsalV2"/>,
+        /// otherwise just use <see cref="SerializeMsalV3"/>/<see cref="DeserializeMsalV3"/>.
         /// </summary>
         /// <param name="msalV3State">Byte stream representation of the cache</param>
         /// <remarks>

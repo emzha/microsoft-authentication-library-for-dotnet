@@ -1,29 +1,5 @@
-﻿// ------------------------------------------------------------------------------
-//
-// Copyright (c) Microsoft Corporation.
-// All rights reserved.
-//
-// This code is licensed under the MIT License.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files(the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-// ------------------------------------------------------------------------------
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
 using System;
 using System.Linq;
@@ -32,12 +8,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Identity.Client;
+using Microsoft.Identity.Client.PlatformsCommon.Interfaces;
 using Microsoft.Identity.Client.UI;
 using Microsoft.Identity.Test.Common;
 using Microsoft.Identity.Test.Common.Core.Helpers;
 using Microsoft.Identity.Test.Common.Core.Mocks;
 using Microsoft.Identity.Test.Common.Mocks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NSubstitute;
 
 namespace Microsoft.Identity.Test.Unit.RequestsTests
 {
@@ -109,7 +87,7 @@ namespace Microsoft.Identity.Test.Unit.RequestsTests
                 var ex = AssertException.TaskThrows<MsalUiRequiredException>(() => SilentAsync(_appB, ServerTokenResponse.ErrorClientMismatch));
                 Assert.AreEqual(MsalError.NoTokensFoundError, ex.ErrorCode);
 
-                // B can resume acquiring tokens silently via the normal RT, after a non
+                // B can resume acquiring tokens silently via the normal RT
                 await InteractiveAsync(_appB, ServerTokenResponse.NonFociToken).ConfigureAwait(false);
                 await SilentAsync(_appB, ServerTokenResponse.NonFociToken).ConfigureAwait(false);
 
@@ -174,7 +152,7 @@ namespace Microsoft.Identity.Test.Unit.RequestsTests
                     .Single(rt => _appB.AppConfig.ClientId == rt.ClientId && string.IsNullOrEmpty(rt.FamilyId));
                 _appB.UserTokenCacheInternal.Accessor.DeleteRefreshToken(art.GetKey());
 
-                // B can still use the FRT 
+                // B can still use the FRT
                 await SilentAsync(_appB, ServerTokenResponse.FociToken).ConfigureAwait(false);
 
                 // Assert
@@ -212,13 +190,80 @@ namespace Microsoft.Identity.Test.Unit.RequestsTests
             }
         }
 
+        [TestMethod]
+        public async Task TestGetAndRemoveAccountsFociDisabledAsync()
+        {
+            using (_harness = new MockHttpAndServiceBundle())
+            {
+                InitApps();
+
+                // A is part of the family, and MSAL supports FOCI (e.g. ADAL.iOS)
+                await InteractiveAsync(_appA, ServerTokenResponse.FociToken).ConfigureAwait(false);
+
+                // B is part of the family, but MSAL does not support FOCI (i.e. older version or different MSAL)
+                var testFlags = Substitute.For<IFeatureFlags>();
+                testFlags.IsFociEnabled.Returns(false);
+                _appB.ServiceBundle.PlatformProxy.SetFeatureFlags(testFlags);
+                _appB.UserTokenCacheInternal = new TokenCache(_appB.ServiceBundle);
+
+                await InteractiveAsync(_appB, ServerTokenResponse.FociToken).ConfigureAwait(false);
+
+                var accA = await _appA.GetAccountsAsync().ConfigureAwait(false);
+                var accB = await _appB.GetAccountsAsync().ConfigureAwait(false);
+
+                Assert.AreEqual(1, accA.Count());
+                Assert.AreEqual(1, accB.Count());
+
+                // Remove account from app B
+                await _appB.RemoveAsync(accB.Single()).ConfigureAwait(false);
+
+                Assert.IsTrue( 
+                    !String.IsNullOrEmpty(_appA.UserTokenCacheInternal.GetAllRefreshTokens(false).Single().FamilyId),
+                    "The FRT should not be deleted when FOCI is disabled");
+
+                Assert.IsFalse(
+                    _appB.UserTokenCacheInternal.Accessor.GetAllAccounts().Any(),
+                    "Account is still deleted");
+            }
+        }
+
+        [TestMethod]
+        public async Task TestGetAndRemoveAccountsFociEnabledAsync()
+        {
+            using (_harness = new MockHttpAndServiceBundle())
+            {
+                InitApps();
+
+                // A is part of the family, and MSAL supports FOCI (e.g. ADAL.iOS)
+                await InteractiveAsync(_appA, ServerTokenResponse.FociToken).ConfigureAwait(false);
+
+                // B is part of the family
+                await InteractiveAsync(_appB, ServerTokenResponse.FociToken).ConfigureAwait(false);
+
+                var accA = await _appA.GetAccountsAsync().ConfigureAwait(false);
+                var accB = await _appB.GetAccountsAsync().ConfigureAwait(false);
+
+                Assert.AreEqual(1, accA.Count());
+                Assert.AreEqual(1, accB.Count());
+
+                // Remove account from app B
+                await _appB.RemoveAsync(accB.Single()).ConfigureAwait(false);
+
+                Assert.IsTrue(!_appB.UserTokenCacheInternal.GetAllRefreshTokens(true).Any());
+                Assert.IsTrue(!_appB.UserTokenCacheInternal.GetAllAccounts().Any());
+            }
+        }
 
         private void AssertAppMetadata(PublicClientApplication app, bool partOfFamily)
         {
-            Assert.IsNotNull(
-                app.UserTokenCacheInternal.Accessor.GetAllAppMetadata()
+            if (app.ServiceBundle.PlatformProxy.GetFeatureFlags().IsFociEnabled)
+            {
+                Assert.IsNotNull(
+                    app.UserTokenCacheInternal.Accessor.GetAllAppMetadata()
                    .Single(m => m.ClientId == app.AppConfig.ClientId &&
                                 partOfFamily == !string.IsNullOrEmpty(m.FamilyId)));
+            }
+
         }
 
         private async Task SilentAsync(
